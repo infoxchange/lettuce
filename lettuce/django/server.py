@@ -228,45 +228,65 @@ class Server(object):
     that lettuce can be used with selenium, webdriver, windmill or any
     browser tool"""
 
-    def __init__(self, address='0.0.0.0', port=None):
+    def __init__(self, address='0.0.0.0', port=None, use_liveserver=False):
         self.port = int(port or getattr(settings, 'LETTUCE_SERVER_PORT', 8000))
         self.address = unicode(address)
+        try:
+            # If we're in 1.4+, just use the built in LiveServer in django.
+            from django.test.testcases import LiveServerTestCase
+            self.use_liveserver = use_liveserver
+        except:
+            self.use_liveserver = False
         queue = create_mail_queue()
         self._actual_server = ThreadedServer(self.address, self.port, queue)
 
     def start(self):
         """Starts the webserver thread, and waits it to be available"""
         call_hook('before', 'runserver', self._actual_server)
-        if self._actual_server.should_serve_admin_media():
-            msg = "Preparing to serve django's admin site static files"
-            if getattr(settings, 'LETTUCE_SERVE_ADMIN_MEDIA', False):
-                msg += ' (as per settings.LETTUCE_SERVE_ADMIN_MEDIA=True)'
+        if self.use_liveserver:
+            from django.test.testcases import LiveServerTestCase
+            os.environ['DJANGO_LIVE_TEST_SERVER_ADDRESS'] = "%s:%s" % (self.address, self.port,)
+            addrport = self.address, self.port
+            LiveServerTestCase.setUpClass()
+        else:
+            if self._actual_server.should_serve_admin_media():
+                msg = "Preparing to serve django's admin site static files"
+                if getattr(settings, 'LETTUCE_SERVE_ADMIN_MEDIA', False):
+                    msg += ' (as per settings.LETTUCE_SERVE_ADMIN_MEDIA=True)'
 
-            print "%s..." % msg
+                print "%s..." % msg
 
-        self._actual_server.start()
-        self._actual_server.wait()
+            self._actual_server.start()
+            self._actual_server.wait()
 
-        addrport = self.address, self._actual_server.port
-        if not self._actual_server.is_alive():
-            raise LettuceServerException(
-                'Lettuce could not run the builtin Django server at %s:%d"\n'
-                'maybe you forgot a "runserver" instance running ?\n\n'
-                'well if you really do not want lettuce to run the server '
-                'for you, then just run:\n\n'
-                'python manage.py --no-server' % addrport,
-            )
+            addrport = self.address, self._actual_server.port
+            if not self._actual_server.is_alive():
+                raise LettuceServerException(
+                    'Lettuce could not run the builtin Django server at %s:%d"\n'
+                    'maybe you forgot a "runserver" instance running ?\n\n'
+                    'well if you really do not want lettuce to run the server '
+                    'for you, then just run:\n\n'
+                    'python manage.py --no-server' % addrport,
+                )
 
         print "Django's builtin server is running at %s:%d" % addrport
 
     def stop(self, fail=False):
-        pid = self._actual_server.pid
-        if pid:
-            os.kill(pid, 9)
+        if self.use_liveserver:
+            from django.test.testcases import LiveServerTestCase
+            LiveServerTestCase.tearDownClass()
+            code = 0
+        else:
+            from traceback import print_exc
+            print_exc()
+            pid = self._actual_server.pid
+            if pid:
+                os.kill(pid, 9)
 
-        code = int(fail)
+            code = int(fail)
+
         call_hook('after', 'runserver', self._actual_server)
-        return sys.exit(code)
+        return code
 
     def url(self, url=""):
         base_url = "http://%s" % ThreadedServer.get_real_address(self.address)

@@ -72,3 +72,25 @@ def test_harvest_uses_test_runner():
     assert "Custom test runner enabled." in out
 
     FileSystem.popd()
+
+def test_server_in_a_separate_process():
+    'harvest uses a separate server process by default'
+
+    FileSystem.pushd(current_directory, "django", "brocolis")
+
+    status, out = commands.getstatusoutput(
+        "python manage.py harvest -s 1 leaves/features/modification.feature")
+    assert_equals(status, 0, out)
+
+    FileSystem.popd()
+
+def test_server_in_process():
+    'harvest uses the same process if run with -T'
+
+    FileSystem.pushd(current_directory, "django", "brocolis")
+
+    status, out = commands.getstatusoutput(
+        "python manage.py harvest -T -s 2 leaves/features/modification.feature")
+    assert_equals(status, 0, out)
+
+    FileSystem.popd()

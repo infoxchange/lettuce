@@ -134,7 +134,7 @@ class Command(BaseCommand):
 
         settings.DEBUG = options.get('debug', False)
 
-        server = Server(port=options['port'])
+        server = Server(port=options['port'], use_liveserver=test_database)
 
         paths = self.get_paths(args, apps_to_run, apps_to_avoid)
         if run_server:
@@ -180,12 +180,17 @@ class Command(BaseCommand):
             traceback.print_exc(e)
 
         finally:
-            registry.call_hook('after', 'harvest', results)
-            
-            if test_database:
-                self._testrunner.teardown_databases(self._old_db_config)
+            try:
+                registry.call_hook('after', 'harvest', results)
+                stop_code = server.stop(failed)
+                if stop_code != 0:
+                    failed = True
 
-            teardown_test_environment()
-            server.stop(failed)
+                if test_database:
+                    self._testrunner.teardown_databases(self._old_db_config)
+                teardown_test_environment()
+            except:
+                import traceback
+                traceback.print_exc()
 
-            raise SystemExit(int(failed))
+            sys.exit(int(failed))
