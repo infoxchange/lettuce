@@ -201,6 +201,11 @@ def models_exist(model, data, queryset=None):
 
 
 def ignore_with_savepoint(func):
+    """
+    Decorator for steps to be ignored if there is a savepoint set. Should be
+    used when only the first step run is useful and everything else is handled
+    by a savepoint revert.
+    """
     def check_savepoint(step, *args, **kwargs):
         try:
             step.background.models_savepoint
