@@ -9,9 +9,10 @@ from django.core.management import call_command
 from django.core.management.color import no_style
 from django.db import connection
 from django.db.models.loading import get_models
+from django.db.transaction import savepoint, savepoint_rollback
 from django.utils.functional import curry
 
-from lettuce import step
+from lettuce import after, before, step
 
 
 STEP_PREFIX = r'(?:Given|And|Then|When) '
@@ -199,7 +200,18 @@ def models_exist(model, data, queryset=None):
         raise AssertionError("%i rows missing" % failed)
 
 
+def ignore_with_savepoint(func):
+    def check_savepoint(step, *args, **kwargs):
+        try:
+            step.background.models_savepoint
+        except AttributeError:
+            return func(step, *args, **kwargs)
+
+    return check_savepoint
+
+
 @step(r'I have(?: an?)? ([a-z][a-z0-9_ ]*) in the database:')
+@ignore_with_savepoint
 def create_models_generic(step, model):
     """
     And I have foos in the database:
@@ -222,6 +234,7 @@ def create_models_generic(step, model):
 
 @step(STEP_PREFIX + r'([A-Z][a-z0-9_ ]*) with ([a-z]+) "([^"]*)"' +
       r' has(?: an?)? ([A-Z][a-z0-9_ ]*) in the database:')
+@ignore_with_savepoint
 def create_models_for_relation(step, rel_model_name,
                                rel_key, rel_value, model):
     """
@@ -270,6 +283,28 @@ def model_count(step, count, model):
     found = model.objects.count()
     assert found == expected, "Expected %d %s, found %d." % \
         (expected, model._meta.verbose_name_plural, found)
+
+
+@before.each_background
+def revert_savepoint(background):
+    """
+    Revert back to a previously set savepoint if one has been set
+    """
+
+    try:
+        savepoint_rollback(background.models_savepoint)
+        set_savepoint(background)
+    except AttributeError:
+        pass
+
+
+@after.each_background
+def set_savepoint(background, results=None):
+    """
+    Set a savepoint so that we can later revert changes
+    """
+
+    background.models_savepoint = savepoint()
 
 
 def clean_db(scenario):
