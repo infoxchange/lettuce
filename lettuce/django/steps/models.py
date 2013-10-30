@@ -13,7 +13,6 @@ from django.utils.functional import curry
 
 from lettuce import step
 
-
 STEP_PREFIX = r'(?:Given|And|Then|When) '
 
 
@@ -280,3 +279,6 @@ def clean_db(scenario):
     """
 
     call_command('flush', interactive=False)
+
+# load the Django contrib models
+from contrib_models import *
