@@ -219,15 +219,18 @@ class Step(object):
     scenario = None
     background = None
     display = True
+    columns = None
+    matrix = None
 
     def __init__(self, sentence, remaining_lines, line=None, filename=None):
         self.sentence = sentence
         self.original_sentence = sentence
         self._remaining_lines = remaining_lines
-        keys, hashes, self.multiline = self._parse_remaining_lines(remaining_lines)
-
+        keys, hashes, self.multiline, columns, nukeys = self._parse_remaining_lines(remaining_lines)
         self.keys = tuple(keys)
+        self.non_unique_keys = nukeys
         self.hashes = HashList(self, hashes)
+        self.columns = columns
         self.described_at = StepDescription(line, filename)
         self.proposed_method_name, self.proposed_sentence = self.propose_definition()
 
@@ -260,6 +263,7 @@ class Step(object):
 
     def solve_and_clone(self, data, display_step):
         sentence = self.sentence
+        multiline = self.multiline
         hashes = self.hashes[:]  # deep copy
         for k, v in data.items():
 
@@ -273,10 +277,12 @@ class Step(object):
                 return new_row
 
             sentence = evaluate(sentence)
+            multiline = evaluate(multiline)
             hashes = map(evaluate_hash_value, hashes)
 
         new = deepcopy(self)
         new.sentence = sentence
+        new.multiline = multiline
         new.hashes = hashes
         new.display = display_step
         return new
@@ -332,7 +338,14 @@ class Step(object):
         lines = strings.dicts_to_string(self.hashes, self.keys).splitlines()
         return u"\n".join([(u" " * self.table_indentation) + line for line in lines]) + "\n"
 
+    def represent_columns(self):
+        lines = strings.json_to_string(self.columns, self.non_unique_keys).splitlines()
+        return u"\n".join([(u" " * self.table_indentation) + line for line in lines]) + "\n"
+
     def __unicode__(self):
+        return u'<Step: "%s">' % self.sentence
+    
+    def __repr__(self):
         return u'<Step: "%s">' % self.sentence
 
     def __repr__(self):
@@ -341,7 +354,9 @@ class Step(object):
     def _parse_remaining_lines(self, lines):
         multiline = strings.parse_multiline(lines)
         keys, hashes = strings.parse_hashes(lines)
-        return keys, hashes, multiline
+        non_unique_keys, columns = strings.parse_as_json(lines)
+        return keys, hashes, multiline, columns, non_unique_keys
+
 
     def _get_match(self, ignore_case):
         matched, func = None, lambda: None
