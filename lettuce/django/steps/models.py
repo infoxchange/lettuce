@@ -10,6 +10,7 @@ from django.core.management.color import no_style
 from django.db import connection
 from django.db.models.loading import get_models
 from django.utils.functional import curry
+from functools import wraps
 
 from lettuce import step
 
@@ -40,6 +41,7 @@ def creates_models(model):
 
     def decorated(func):
 
+        @wraps(func)
         @writes_models(model)
         def wrapped(data, field):
             if field:
@@ -150,6 +152,8 @@ def write_models(model, data, field=None):
     if hasattr(data, 'hashes'):
         data = hashes_data(data)
 
+    written = []
+
     for hash_ in data:
         if field:
             if field not in hash_:
@@ -165,9 +169,12 @@ def write_models(model, data, field=None):
             model_obj.save()
 
         else:
-            model.objects.create(**hash_)
+            model_obj = model.objects.create(**hash_)
+
+        written.append(model_obj)
 
     reset_sequence(model)
+    return written
 
 
 def _dump_model(model, attrs=None):
